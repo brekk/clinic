@@ -1,0 +1,104 @@
+import type { Wish } from "Wish"
+
+import type { Buffer } from "@/Buffer"
+
+import Dict from "Dictionary"
+import { noop } from "Function"
+import IO from "IO"
+import List from "List"
+import { fromMaybe } from "Maybe"
+import Process from "Process"
+import Terminal from "Terminal"
+import Tuple from "Tuple"
+import { Wish } from "Wish"
+
+import { ESC, clear, eraseAfterCursor, restoreCursor, saveCursor } from "@/Constants"
+
+
+
+export alias Action a = a -> {}
+export alias NullaryAction = Action {}
+export alias Option = #[String, NullaryAction]
+export alias ActionMap = Dictionary String NullaryAction
+
+export defaultExit = () => {
+  IO.putLine("👋")
+  Process.exit(0)
+}
+
+backspace :: Buffer String -> {}
+export backspace = (buffer) => {
+  buffer.pop()
+  restoreCursor()
+  eraseAfterCursor()
+  IO.put(buffer.get())
+}
+
+promptWithExit :: NullaryAction -> String -> Buffer String -> Wish String String
+export promptWithExit = (exitAction, label, buffer) => {
+  Terminal.enableTTYRawMode()
+  IO.put(label ++ " ")
+  saveCursor()
+  return Wish(
+    (die, succeed) => {
+      Terminal.onKeyPressed(
+        (seq) => {
+          if (seq == ESC.CTRL_C) do {
+            die("Quitting!")
+            exitAction()
+          } else if (seq == ESC.BACKSPACE) {
+            backspace(buffer)
+          } else if (seq == ESC.ENTER) {
+            succeed(buffer.get())
+          } else do {
+            IO.put(seq)
+            buffer.push(seq)
+          }
+        },
+      )
+      return () => {}
+    },
+  )
+}
+
+export prompt = promptWithExit(defaultExit)
+
+chooseWithExit :: NullaryAction -> ActionMap -> (List Option -> Integer -> String) -> {}
+export chooseWithExit = (exitAction, actionMap, listRenderer) => {
+  cursor = 0
+  options = Dict.toList(actionMap)
+  clear()
+  saveCursor()
+  max = List.length(options)
+  draw = pipe(
+    listRenderer(options),
+    IO.put,
+  )
+  Terminal.enableTTYRawMode()
+  draw(cursor)
+  Terminal.onKeyPressed(
+    (seq) => {
+      if (seq == ESC.CTRL_C) do {
+        exitAction()
+      } else if (seq == ESC.ARROW_UP || seq == ESC.ARROW_LEFT) do {
+        cursor := cursor - 1 < 0 ? max - 1 : cursor - 1
+      } else if (seq == ESC.ARROW_DOWN || seq == ESC.ARROW_RIGHT) do {
+        cursor := cursor + 1 > max - 1 ? 0 : cursor + 1
+      } else if (seq == ESC.ENTER) do {
+        eraseAfterCursor()
+        pipe(
+          List.nth(cursor),
+          map(Tuple.snd),
+          fromMaybe(noop),
+          (fn) => fn(),
+        )(options)
+        Process.exit(0)
+      }
+      clear()
+      draw(cursor)
+    },
+  )
+}
+
+
+export choose = chooseWithExit(defaultExit)
