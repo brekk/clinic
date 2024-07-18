@@ -1,6 +1,11 @@
+import type { Either } from "Either"
+import type { Maybe } from "Maybe"
+
+import { Left, Right } from "Either"
 import { noop } from "Function"
 import IO from "IO"
 import List from "List"
+import { Just, Nothing, fromMaybe } from "Maybe"
 import String from "String"
 import Terminal from "Terminal"
 import Wish from "Wish"
@@ -43,7 +48,7 @@ listicle = (o, x) => `⌜ ⌝\n${
 */
 // needs rework for cursor
 // chooseAction(opts, listicle)
-main = () => {
+main2 = () => {
   chooser = (o, x) => `⌜ ⌝\n${
     pipe(
       List.mapWithIndex(
@@ -57,4 +62,34 @@ main = () => {
   pipe(
     Wish.fulfill(tagOut("BAD"), tagOut("GOOD")),
   )(choose([" a ", " b ", " c "], chooser))
+}
+
+covet :: (a -> {}) -> (b -> {}) -> Wish a b -> Maybe (Either a b)
+covet = (fail, succeed, w) => {
+  captured = Nothing
+  Wish.fulfill(
+    (f) => {
+      fail(f)
+      captured := Just(Left(f))
+    },
+    (x) => {
+      succeed(x)
+      captured := Just(Right(x))
+    },
+  )(w)
+  return captured
+}
+
+main = () => {
+  pipe(
+    prompt("What is your name?"),
+    map(String.toUpper),
+    covet(tagOut("BAD"), tagOut("GOOD")),
+    map(map(String.toLower)),
+    IO.trace("raw!"),
+    // Wish.fulfill(tagOut("BAD"), tagOut("GOOD")),
+
+
+
+  )(Buffer.make(""))
 }

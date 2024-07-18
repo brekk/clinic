@@ -1,0 +1,51 @@
+import String from "String"
+import { assertEquals, test } from "Test"
+import Wish from "Wish"
+
+import { isDirectory, isFile, readAll, readDirectory } from "@/FileSystem"
+import { asyncReport, report } from "@/Test"
+
+
+
+asyncReport(isDirectory, "isDirectory", [#["./src", true], #["./not-a-valid-directory", false]])
+
+asyncReport(
+  isFile,
+  "isFile",
+  [#["./src/FileSystem.spec.mad", true], #["./not-a-valid-directory/File.mad", false]],
+)
+
+asyncReport(readDirectory(() => false), "readDirectory", [#[".", []]])
+asyncReport(
+  readAll((y) => !String.contains("spec", y)),
+  "readAll",
+  [
+    #[
+      "./src",
+      map(
+        (name) => ({ directory: false, fullPath: "./src/" ++ name, name, path: "./src" }),
+        [
+          "Buffer.mad",
+          "Clinic.mad",
+          "ClinicBox.mad",
+          "Constants.mad",
+          "FileSystem.mad",
+          "Help.mad",
+          "Key.mad",
+          "List.mad",
+          "Main.mad",
+          "Pagination.mad",
+          "Progress.mad",
+          "Prompt.mad",
+          "Spinner.mad",
+          "Stopwatch.mad",
+          "Table.mad",
+          "Test.mad",
+          "TextArea.mad",
+          "Timer.mad",
+          "Viewport.mad",
+        ],
+      ),
+    ],
+  ],
+)

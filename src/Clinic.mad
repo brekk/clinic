@@ -36,6 +36,8 @@ export backspace = (buffer) => {
   IO.put(buffer.get())
 }
 
+type Session a b = Session({} -> {}, Wish a b)
+
 clearKeyWatcher :: Maybe HandlerId -> {}
 clearKeyWatcher = (handlerId) => {
   Terminal.disableTTYRawMode()
@@ -44,8 +46,8 @@ clearKeyWatcher = (handlerId) => {
   )(handlerId)
 }
 
-promptWithExit :: NullaryAction -> String -> Buffer String -> Wish String String
-export promptWithExit = (exitAction, label, buffer) => {
+promptWithExitOld :: NullaryAction -> String -> Buffer String -> Wish String String
+export promptWithExitOld = (exitAction, label, buffer) => {
   Terminal.enableTTYRawMode()
   IO.put(label ++ " ")
   saveCursor()
@@ -72,8 +74,48 @@ export promptWithExit = (exitAction, label, buffer) => {
           },
         ),
       )
-      return () => {}
+      return () => {
+        clearKeyWatcher(keyWatch)
+      }
     },
+  )
+}
+
+promptWithExit :: NullaryAction -> String -> Buffer String -> Session String String
+export promptWithExit = (exitAction, label, buffer) => {
+  Terminal.enableTTYRawMode()
+  IO.put(label ++ " ")
+  saveCursor()
+  keyWatch = Nothing
+  return Session(
+    () => clearKeyWatcher(keyWatch),
+    Wish(
+      (_bad, _good) => {
+        keyWatch := Just(
+          Terminal.onKeyPressed(
+            (seq) => {
+              if (seq == ESC.CTRL_C) do {
+                clearKeyWatcher(keyWatch)
+                _bad("Quitting!")
+                exitAction()
+              } else if (seq == ESC.BACKSPACE) {
+                backspace(buffer)
+              } else if (seq == ESC.ENTER) do {
+                clear()
+                clearKeyWatcher(keyWatch)
+                _good(buffer.get())
+              } else do {
+                IO.put(seq)
+                buffer.push(seq)
+              }
+            },
+          ),
+        )
+        return () => {
+          clearKeyWatcher(keyWatch)
+        }
+      },
+    ),
   )
 }
 

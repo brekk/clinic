@@ -1,0 +1,78 @@
+import type { Wish } from "Wish"
+
+import Dir from "Directory"
+import File from "File"
+import IO from "IO"
+import Wish from "Wish"
+
+
+
+export alias DirEnt = { directory :: Boolean, fullPath :: String, name :: String, path :: String }
+
+#iftarget js
+
+#- import fs from "node:fs" -#
+#- import path from "node:path" -#
+
+status :: ((a -> {}) -> (c -> {}) -> a -> b -> c) -> String -> Wish a c
+export status = (transform, filePath) => Wish.Wish(
+  (b, g) => {
+    #- fs.lstat(filePath, (e, x) => transform(b)(g)(e)(x)) -#
+    return () => {}
+  },
+)
+
+
+isDirectory :: String -> Wish a Boolean
+export isDirectory = status((b, g, e, x) => #- e ? g(false) : g(x.isDirectory()) -#)
+// /*
+isFile :: String -> Wish a Boolean
+export isFile = status((b, g, e, x) => #- e ? g(false) : g(x.isFile()) -#)
+
+readdir :: Boolean -> (String -> Boolean) -> String -> Wish a (List DirEnt)
+export readdir = (recursive, filter, filePath) => Wish.Wish(
+  (bad, good) => {
+    #- fs.readdir(
+      filePath,
+      { withFileTypes: true, recursive },
+      (e, x) => e ? bad(e) :
+      good(__jsArrayToList__(x.filter(({name}) => filter(name)).map(y => ({
+        name: y.name,
+        path: y.path,
+        fullPath: y.path + path.sep + y.name,
+        directory: y.isDirectory()
+        // groups: __jsArrayToList__(y.path.split(path.sep).slice(1)),
+      }))))
+    ) -#
+    return () => {}
+  },
+)
+export readAll = readdir(true)
+export readDirectory = readdir(false)
+
+
+#elseif llvm
+
+isDir :: String -> Boolean
+isDir = extern "clinic__is__directory"
+
+isDirectory :: String -> Wish a Boolean
+export isDirectory = (p) => Wish.good(isDir(p))
+
+isF :: String -> Boolean
+isF = extern "clinic__is__file"
+
+isFile :: String -> Wish a Boolean
+export isFile = (p) => Wish.good(isF(p))
+
+readdir :: Boolean -> (String -> Boolean) -> String -> Wish a (List DirEnt)
+export readdir = (_, _, _) => Wish.good([])
+
+readAll :: (String -> Boolean) -> String -> Wish a (List DirEnt)
+export readAll = (_, _) => Wish.good([])
+
+readDirectory :: (String -> Boolean) -> String -> Wish a (List DirEnt)
+export readDirectory = (_, _) => Wish.good([])
+// */
+
+#endif
