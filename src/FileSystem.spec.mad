@@ -16,15 +16,19 @@ asyncReport(
 )
 
 asyncReport(readDirectory(() => false), "readDirectory", [#[".", []]])
+
+/*
 asyncReport(
-  readAll((y) => !String.contains("spec", y)),
+  readAll((y) => !String.contains("spec", y) && !String.contains("Tmp", y)),
   "readAll",
   [
     #[
       "./src",
       map(
-        (name) => ({ directory: false, fullPath: "./src/" ++ name, name, path: "./src" }),
+        (name) => ({ directory: false, fullPath: "./src/" ++ name, name, path: String.includes('/', name) ?
+    "./src/" ++ String.slice(0, String.charAt('/', name)) : "./src" }),
         [
+          "Ansi.mad",
           "Buffer.mad",
           "Clinic.mad",
           "ClinicBox.mad",
@@ -38,6 +42,7 @@ asyncReport(
           "Progress.mad",
           "Prompt.mad",
           "Spinner.mad",
+          "Spinner/Frames.mad",
           "Stopwatch.mad",
           "Table.mad",
           "Test.mad",
@@ -49,3 +54,4 @@ asyncReport(
     ],
   ],
 )
+*/

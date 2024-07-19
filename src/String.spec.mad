@@ -1,0 +1,6 @@
+import { indexOf } from "@/String"
+import { report } from "@/Test"
+
+
+
+report(indexOf($, "the quick brown fox"), "indexOf", [#['t', 0], #['x', 18]])

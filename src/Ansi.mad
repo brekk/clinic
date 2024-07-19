@@ -1,0 +1,430 @@
+import { always } from "Function"
+import IO from "IO"
+import List from "List"
+import String from "String"
+
+
+
+K = always
+
+
+
+export ESC = `\x1b`
+
+// via https://en.wikipedia.org/wiki/ANSI_escape_code
+
+/**
+ * Ansi styles to be used with the ansiColor function.
+ *
+ * @since 0.11.0
+ */
+export GRAPHICS = {
+  Reset: "0",
+  Bold: "1",
+  Dim: "2",
+  Italic: "3",
+  Underline: "4",
+  Blinking: "5",
+  Invert: "7",
+  Hidden: "8",
+  NoBold: "21",
+  NoDim: "22",
+  NoItalic: "23",
+  NoUnderline: "24",
+  NoBlinking: "25",
+  NoInvert: "27",
+  NoHidden: "28",
+  FGBlack: "30",
+  FGRed: "31",
+  FGGreen: "32",
+  FGYellow: "33",
+  FGBlue: "34",
+  FGMagenta: "35",
+  FGCyan: "36",
+  FGWhite: "37",
+  FGBrightBlack: "90",
+  FGBrightRed: "91",
+  FGBrightGreen: "92",
+  FGBrightYellow: "93",
+  FGBrightBlue: "94",
+  FGBrightMagenta: "95",
+  FGBrightCyan: "96",
+  FGBrightWhite: "97",
+  BGBlack: "40",
+  BGRed: "41",
+  BGGreen: "42",
+  BGYellow: "43",
+  BGBlue: "44",
+  BGMagenta: "45",
+  BGCyan: "46",
+  BGWhite: "47",
+  BGBrightBlack: "100",
+  BGBrightRed: "101",
+  BGBrightGreen: "102",
+  BGBrightYellow: "103",
+  BGBrightBlue: "104",
+  BGBrightMagenta: "105",
+  BGBrightCyan: "106",
+  BGBrightWhite: "107",
+}
+
+// ANSI constant names for functions!
+export ANSI_FN = {
+  // unary
+  CursorUp: "A",
+  CursorDown: "B",
+  CursorForward: "C",
+  CursorBack: "D",
+  CursorNextLine: "E",
+  CursorPrevLine: "F",
+  CursorMoveCol: "G",
+  EraseInDisplay: "J",
+  EraseInLine: "K",
+  ScrollUp: "S",
+  ScrollDown: "T",
+  // binary 
+  CursorMove: "H",
+  // nullary
+  CursorSave: "s",
+  CursorRestore: "u",
+  // n-ary
+  GraphicsMode: "m",
+  RequestPosition: "6n",
+}
+
+export type EscapeSequence = Escape(Boolean, String, List String)
+export type Color = Color(List String)
+
+ansiSeq :: Boolean -> String -> List String -> String
+export ansiSeq = (invoke, fn, parts) => ESC ++ (invoke ? "[" : "") ++ String.join(";", parts) ++ fn
+export ansiFn = ansiSeq(true)
+export ansiCall = ansiSeq(false)
+
+escapeToString :: EscapeSequence -> String
+export escapeToString = where {
+  Escape(invoke, fn, parts) =>
+    ansiSeq(invoke, fn, parts)
+}
+
+colorToEscape :: Color -> EscapeSequence
+export colorToEscape = where {
+  Color(styles) =>
+    Escape(true, ANSI_FN.GraphicsMode, styles)
+}
+
+export type EraseMode = EraseInDisplay | EraseInLine
+export type EraseDirective = EraseToEnd | EraseToBeginning | EraseAll | EraseHistory
+export type Eraser = Eraser(EraseMode, EraseDirective)
+export EraserDisplay = Eraser(EraseInDisplay)
+export EraserLine = Eraser(EraseInLine)
+
+export ERASER_LITERAL = { ToEnd: "0", ToBeginning: "1", All: "2", History: "3" }
+
+erase :: EraseMode -> EraseDirective -> String
+erase = (mode, dir) => where(#[mode, dir]) {
+  #[EraseInDisplay, EraseToEnd] =>
+    ansiFn(ANSI_FN.EraseInDisplay, [ERASER_LITERAL.ToEnd])
+
+  #[EraseInDisplay, EraseToBeginning] =>
+    ansiFn(ANSI_FN.EraseInDisplay, [ERASER_LITERAL.ToBeginning])
+
+  #[EraseInDisplay, EraseAll] =>
+    ansiFn(ANSI_FN.EraseInDisplay, [ERASER_LITERAL.All])
+
+  #[EraseInDisplay, EraseHistory] =>
+    ansiFn(ANSI_FN.EraseInDisplay, [ERASER_LITERAL.History])
+
+  #[EraseInLine, EraseToEnd] =>
+    ansiFn(ANSI_FN.EraseInLine, [ERASER_LITERAL.ToEnd])
+
+  #[EraseInLine, EraseToBeginning] =>
+    ansiFn(ANSI_FN.EraseInLine, [ERASER_LITERAL.ToBeginning])
+
+  // #[EraseInLine, EraseToEnd] =>
+  //   ansiFn(ANSI_FN.EraseInLine, [ERASER_LITERAL.All])
+
+  // EraseLineHistory is not a thing!
+
+  _ =>
+    ""
+}
+eraserToString :: Eraser -> String
+export eraserToString = where {
+  Eraser(m, d) =>
+    erase(m, d)
+}
+
+enprint :: String -> {} -> {}
+export enprint = (str) => () => IO.put(str)
+
+eLine = erase(EraseInLine)
+eDisplay = erase(EraseInDisplay)
+
+export ERASE_TO_EOL = eLine(EraseToEnd)
+export ERASE_TO_BOL = eLine(EraseToBeginning)
+export ERASE_LINE = eLine(EraseAll)
+export ERASE_TO_EOD = eDisplay(EraseToEnd)
+export ERASE_TO_BOD = eDisplay(EraseToBeginning)
+export ERASE_DISPLAY = eDisplay(EraseAll)
+export ERASE_HISTORY = eDisplay(EraseHistory)
+
+export eraseLineToEnd = enprint(ERASE_TO_EOL)
+export eraseLineToBeginning = enprint(ERASE_TO_BOL)
+export eraseLine = enprint(ERASE_LINE)
+export eraseDisplayToEnd = enprint(ERASE_TO_EOD)
+export eraseDisplayToBeginning = enprint(ERASE_TO_BOD)
+export eraseDisplay = enprint(ERASE_DISPLAY)
+export eraseHistory = enprint(ERASE_HISTORY)
+
+type CursorAction
+  = CursorUp
+  | CursorDown
+  | CursorForward
+  | CursorBack
+  | CursorNextLine
+  | CursorPrevLine
+  | CursorMoveColumn
+  | CursorSave
+  | CursorRestore
+  | CursorMove
+
+cursorNullary :: CursorAction -> String
+cursorNullary = (cursor) => {
+  call = ansiFn($, [])
+  return where(cursor) {
+    CursorSave =>
+      call(ANSI_FN.CursorSave)
+
+    CursorRestore =>
+      call(ANSI_FN.CursorRestore)
+
+    _ =>
+      ""
+  }
+}
+
+cursorUnary :: CursorAction -> Integer -> String
+cursorUnary = (cursor, x) => do {
+  y = show(x)
+  call = ansiFn($, [y])
+  return where(cursor) {
+    CursorUp =>
+      call(ANSI_FN.CursorUp)
+
+    CursorDown =>
+      call(ANSI_FN.CursorDown)
+
+    CursorForward =>
+      call(ANSI_FN.CursorForward)
+
+    CursorBack =>
+      call(ANSI_FN.CursorBack)
+
+    CursorNextLine =>
+      call(ANSI_FN.CursorNextLine)
+
+    CursorPrevLine =>
+      call(ANSI_FN.CursorPrevLine)
+
+    CursorMoveColumn =>
+      call(ANSI_FN.CursorMoveCol)
+
+    _ =>
+      ""
+  }
+}
+
+cursorBinary :: CursorAction -> Integer -> Integer -> String
+cursorBinary = (cursor, x, y) => do {
+  call = ansiFn($, map(show)([x, y]))
+  return where(cursor) {
+    CursorMove =>
+      call(ANSI_FN.CursorMove)
+
+    _ =>
+      ""
+  }
+}
+
+export CURSOR_SAVE = cursorNullary(CursorSave)
+export CURSOR_RESTORE = cursorNullary(CursorRestore)
+
+export cursorSave = enprint(CURSOR_SAVE)
+export cursorRestore = enprint(CURSOR_SAVE)
+
+
+export cursorSeqUp = cursorUnary(CursorUp)
+export cursorSeqDown = cursorUnary(CursorDown)
+export cursorSeqForward = cursorUnary(CursorForward)
+export cursorSeqBack = cursorUnary(CursorBack)
+export cursorSeqNextLine = cursorUnary(CursorNextLine)
+export cursorSeqPrevLine = cursorUnary(CursorPrevLine)
+export cursorSeqMoveColumn = cursorUnary(CursorMoveColumn)
+
+export cursorUp = pipe(
+  cursorSeqUp,
+  enprint,
+)
+export cursorDown = pipe(
+  cursorSeqDown,
+  enprint,
+)
+export cursorForward = pipe(
+  cursorSeqForward,
+  enprint,
+)
+export cursorBack = pipe(
+  cursorSeqBack,
+  enprint,
+)
+export cursorNextLine = pipe(
+  cursorSeqNextLine,
+  enprint,
+)
+export cursorPrevLine = pipe(
+  cursorSeqPrevLine,
+  enprint,
+)
+export cursorMoveColumn = pipe(
+  cursorSeqMoveColumn,
+  enprint,
+)
+
+export cursorSeqMove = cursorBinary(CursorMove)
+export cursorMove = (x, y) => pipe(
+  cursorSeqMove(x),
+  enprint,
+)(y)
+
+export colorSeq = ansiFn(ANSI_FN.GraphicsMode)
+export END_COLOR = colorSeq([GRAPHICS.Reset])
+export noColor = enprint(END_COLOR)
+
+/**
+ * Adds colors to a string given a list of styles, with a trailing style reset.
+ *
+ * @since 0.11.0
+ * @example
+ * ansiColor([GRAPHICS.Bold, GRAPHICS.FGBrightRed], "will be red and bold")
+ */
+ansiColor :: List String -> String -> String
+export ansiColor = (parts, str) => (colorSeq(parts) ++ str ++ END_COLOR)
+
+alias StringTransform = String -> String
+
+alias PaletteKey = {
+  black :: StringTransform,
+  blue :: StringTransform,
+  cyan :: StringTransform,
+  green :: StringTransform,
+  magenta :: StringTransform,
+  red :: StringTransform,
+  white :: StringTransform,
+  yellow :: StringTransform,
+}
+
+alias Seq = List String
+// k b c g m r w y
+type Palette = Palette(Seq, Seq, Seq, Seq, Seq, Seq, Seq, Seq)
+
+instance Semigroup Palette {
+  assoc = (p, q) => where(#[p, q]) {
+    #[Palette(k, b, c, g, m, r, w, y), Palette(k2, b2, c2, g2, m2, r2, w2, y2)] =>
+      Palette(
+        List.concat(k, k2),
+        List.concat(b, b2),
+        List.concat(c, c2),
+        List.concat(g, g2),
+        List.concat(m, m2),
+        List.concat(r, r2),
+        List.concat(w, w2),
+        List.concat(y, y2),
+      )
+  }
+}
+
+instance Monoid Palette {
+  mappend = assoc
+
+  mconcat = List.reduceLeft(assoc, mempty)
+
+  mempty = Palette([], [], [], [], [], [], [], [])
+}
+
+mix :: Seq -> Palette -> Palette
+mix = (toAdd, palette) => assoc(
+  Palette(toAdd, toAdd, toAdd, toAdd, toAdd, toAdd, toAdd, toAdd),
+  palette,
+)
+
+
+mapConcretePalette :: (List String -> String -> String) -> Palette -> PaletteKey
+mapConcretePalette = (fn, pal) => where(pal) {
+  Palette(black, blue, cyan, green, magenta, red, white, yellow) =>
+    (
+      {
+        black: fn(black),
+        blue: fn(blue),
+        cyan: fn(cyan),
+        green: fn(green),
+        magenta: fn(magenta),
+        red: fn(red),
+        white: fn(white),
+        yellow: fn(yellow),
+      }
+    )
+}
+
+concretePalette :: Palette -> PaletteKey
+concretePalette = mapConcretePalette((color) => () => (String.join("", color)))
+
+export paletteBase = Palette(
+  [GRAPHICS.FGBlack],
+  [GRAPHICS.FGBlue],
+  [GRAPHICS.FGCyan],
+  [GRAPHICS.FGGreen],
+  [GRAPHICS.FGMagenta],
+  [GRAPHICS.FGRed],
+  [GRAPHICS.FGWhite],
+  [GRAPHICS.FGYellow],
+)
+export paletteBright = Palette(
+  [GRAPHICS.FGBrightBlack],
+  [GRAPHICS.FGBrightBlue],
+  [GRAPHICS.FGBrightCyan],
+  [GRAPHICS.FGBrightGreen],
+  [GRAPHICS.FGBrightMagenta],
+  [GRAPHICS.FGBrightRed],
+  [GRAPHICS.FGBrightWhite],
+  [GRAPHICS.FGBrightYellow],
+)
+export paletteDark = mix([GRAPHICS.BGBlack], paletteBase)
+export paletteLight = mix([GRAPHICS.BGWhite], paletteBright)
+
+makePalette = mapConcretePalette(ansiColor)
+
+export base = makePalette(paletteBase)
+export dark = makePalette(paletteDark)
+export light = makePalette(paletteLight)
+export bright = makePalette(paletteBright)
+
+export underline = ansiColor([GRAPHICS.Underline])
+export bold = ansiColor([GRAPHICS.Bold])
+export italic = ansiColor([GRAPHICS.Italic])
+export boldUnderline = ansiColor([GRAPHICS.Bold, GRAPHICS.Underline])
+export emphatic = ansiColor([GRAPHICS.Bold, GRAPHICS.Underline, GRAPHICS.Italic])
+
+export style = {
+  base,
+  bright,
+  dark,
+  light,
+  none: noColor,
+  underline,
+  bold,
+  italic,
+  boldUnderline,
+  emphatic,
+}
+
+// text emphasis

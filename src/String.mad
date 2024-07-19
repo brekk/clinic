@@ -1,0 +1,26 @@
+import { equals } from "Function"
+import IO from "IO"
+import { Just, Nothing, fromMaybe, isJust } from "Maybe"
+import { charAt, length } from "String"
+import { Wish } from "Wish"
+
+
+
+indexOf :: Char -> String -> Integer
+export indexOf = (ch, str) => {
+  i = 0
+  matched = Nothing
+  while(!isJust(matched) && i <= length(str)) do {
+    check = pipe(
+      charAt(i),
+      map(equals(ch)),
+      fromMaybe(false),
+    )(str)
+    if (check) do {
+      matched := Just(i)
+    } else do {
+      i := i + 1
+    }
+  }
+  return isJust(matched) ? i : -1
+}

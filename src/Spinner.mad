@@ -1,0 +1,179 @@
+import type { Error } from "File"
+import type { Wish } from "Wish"
+
+import File from "File"
+import IO from "IO"
+import Json from "Json/Parse"
+import List from "List"
+import Math from "Math"
+import { Just, Nothing } from "Maybe"
+import { interval, subscribe } from "Stream"
+import String from "String"
+import Wish from "Wish"
+
+import Term from "@/Ansi"
+
+
+
+type TimerId = TimerId
+type IntervalId = IntervalId
+
+#iftarget js
+
+setInterval :: Integer -> ({} -> {}) -> Integer
+setInterval = (ms, cb) => #- setInterval(cb, ms) -#
+
+clearInterval :: Integer -> {}
+clearInterval = (n) => #- clearInterval(n) -#
+
+setTimeout :: ({} -> {}) -> Integer -> TimerId
+setTimeout = (cb, ms) => #- setTimeout(cb, ms) -#
+
+clearTimeout :: TimerId -> {}
+clearTimeout = (id) => #- clearTimeout(id) -#
+
+clearConsole :: {} -> {}
+clearConsole = () => #- console.clear() -#
+
+#elseif llvm
+
+setTimeout :: ({} -> {}) -> Integer -> TimerId
+setTimeout = extern "__setTimeout__"
+
+clearTimeout :: TimerId -> {}
+clearTimeout = extern "__clearTimeout__"
+
+#endif
+
+
+saveCursor :: {} -> {}
+export saveCursor = () => {
+  IO.put(Term.CURSOR_SAVE)
+}
+
+restoreCursor :: {} -> {}
+export restoreCursor = () => {
+  IO.put(Term.CURSOR_RESTORE)
+}
+moveCursorToNextLine :: {} -> {}
+export moveCursorToNextLine = () => {
+  Term.cursorNextLine(1)
+}
+
+type SpinnerStatus = Waiting | Failed | Succeeded
+alias Statuses = #[String, String, String]
+
+enspin :: Integer -> List String -> Statuses -> {} -> {}
+enspin = (framerate, frames, statuses) => {
+  frameCount = List.length(frames)
+  saveCursor()
+  next = (i) => {
+    restoreCursor()
+    where(List.nth(i % frameCount, frames)) {
+      Just(f) =>
+        where(statuses) {
+          #[waiting, _, _] =>
+            do {
+              IO.put(f ++ " " ++ waiting)
+            }
+        }
+
+      Nothing =>
+        {}
+    }
+  }
+  end = (spinnerStatus) => do {
+    restoreCursor()
+    Term.eraseLineToBeginning()
+    moveCursorToNextLine()
+    // IO.put("\n")
+    IO.trace("SPINSTAT", spinnerStatus)
+    return where(#[spinnerStatus, statuses]) {
+      #[Failed, #[_, failed, _]] =>
+        IO.putLine("𐄂 " ++ failed ++ "\n")
+
+      #[Succeeded, #[_, _, succeeded]] =>
+        IO.putLine("✔ " ++ succeeded ++ "\n")
+
+      _ =>
+        IO.put("\n")
+    }
+  }
+  stop = subscribe(
+    () => {
+      stop()
+      end(Failed)
+    },
+    next,
+    () => {
+      stop()
+      end(Succeeded)
+    },
+    interval(framerate),
+  )
+  return stop
+}
+
+
+spinner :: Integer -> List String -> Statuses -> Wish e a -> Wish e a
+spinner = (framerate, frames, statuses, wish) => {
+  stop = enspin(framerate, frames, statuses)
+  return bimap(
+    (e) => {
+      stop()
+      Term.eraseLineToBeginning()
+      return e
+    },
+    (x) => {
+      stop()
+      Term.eraseLineToBeginning()
+      return x
+    },
+  )(wish)
+}
+
+
+
+
+delay :: Integer -> Wish e a -> Wish e a
+export delay = (time, wish) => Wish.Wish(
+  (bad, good) => {
+    id = TimerId
+    where(wish) {
+      Wish.Wish(run) =>
+        run(bad, (a) => { id := setTimeout(() => { good(a) }, time) })
+    }
+    return () => {
+      clearTimeout(id)
+    }
+  },
+)
+
+virtue = spinner(30, COOL_FRAMES)
+
+type MadlibJson
+  = MadlibJson({
+    // importAliases :: Maybe #[String, String],
+    main :: String,
+    name :: String,
+    version :: String,
+  })
+
+parso = Json.map3(
+  (name, version, m) => MadlibJson({ name, version, main: m }),
+  Json.field("name", Json.string),
+  Json.field("version", Json.string),
+  Json.field("main", Json.string),
+)
+// Json.field("importAliases", Json.maybe(J.lazy((_) => parso))),
+
+
+main = () => {
+  pipe(
+    File.read,
+    map(Json.parse(parso)),
+    delay(3000),
+    virtue(#[Term.style.underline("Parsing file..."), "Failed to parse!", "Parsed!"]),
+    Wish.fulfill((e) => { IO.trace("BAD", e) }, (x) => { IO.log(x) }),
+  )("./madlib.json")
+}
